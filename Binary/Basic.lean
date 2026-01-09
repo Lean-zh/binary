@@ -145,7 +145,7 @@ export Encode (put)
 attribute [specialize] Encode.put
 
 @[always_inline]
-def Put.run (capacity : Nat := 128) : Put → ByteArray := fun x =>
+def Put.run (x : Put) (capacity : Nat := 128) : ByteArray :=
   Prod.snd <$> x (ByteArray.emptyWithCapacity capacity)
 
 @[always_inline]
