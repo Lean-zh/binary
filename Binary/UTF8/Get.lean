@@ -19,10 +19,6 @@ private def byteToChar (b : UInt8) : Char :=
 private def chars_to_string (xs : Array Char) : String :=
   String.ofList xs.toList
 
-@[always_inline]
-def fail {α} (msg : String) : Get α :=
-  throw (.userError msg)
-
 @[always_inline, specialize]
 def satisfy (p : Char → Bool) : Get Char := do
   let b ← getThe UInt8

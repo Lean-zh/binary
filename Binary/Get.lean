@@ -7,6 +7,10 @@ namespace Binary
 
 public section
 
+@[always_inline]
+def fail (msg : String) : Get α :=
+  throw (.userError msg)
+
 @[always_inline, specialize]
 def many (p : Get α) : Get (Array α) := do
   let mut data := #[]
@@ -20,6 +24,12 @@ def many1 (p : Get α) : Get (Array α) := do
   let first ← p
   let rest ← many p
   return rest.insertIdx 0 first
+
+@[always_inline, specialize]
+def shouldBeEOI : Get Unit := do
+  let x ← remaining
+  if x > 0 then
+    fail "expected EOI"
 
 -- TODO: refactor following definitions for performance
 

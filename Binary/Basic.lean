@@ -97,7 +97,7 @@ instance : MonadFinally Get where
       match s with
       | .success a k =>
         let r := f (some a) k
-        let rec go' r :=
+        let rec @[specialize] go' r :=
           match r with
           | .success b k' => .success (a, b) k'
           | .error err k' => .error err k'
@@ -105,7 +105,7 @@ instance : MonadFinally Get where
         go' r
       | .error err _ =>
         let r := f none d -- backtracking
-        let rec go'' r :=
+        let rec @[specialize] go'' r :=
           match r with
           | .success _ k' => .error err k' -- caught, we ignore the inner error
           | .error err' k' => .error err' k' -- the finalizer throws an error
@@ -122,6 +122,18 @@ protected def DecodeResult.mkEOI : Decoder → DecodeResult α := .error .eoi
 
 @[always_inline]
 def throwEOI : Get α := DecodeResult.mkEOI
+
+/-- Drop the parsed data from inner buffer. This can be used to save memory. -/
+@[always_inline]
+def shrink : Get Unit := fun d =>
+  DecodeResult.success () { data := d.data.extract d.offset d.data.size, offset := 0 }
+
+@[always_inline]
+def peek? : Get (Option UInt8) := fun d =>
+  if h : d.offset < d.data.size then
+    DecodeResult.success (some d.data[d.offset]) d
+  else
+    DecodeResult.success none d
 
 class Decode (α : Type) where
   get : Get α
