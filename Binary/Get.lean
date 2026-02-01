@@ -21,6 +21,57 @@ def many1 (p : Get α) : Get (Array α) := do
   let rest ← many p
   return rest.insertIdx 0 first
 
+-- TODO: refactor following definitions for performance
+
+@[inline, specialize]
+def takeAtLeast (n : Nat) (p : Get α) : Get (Array α) := do
+  let mut r := #[]
+  repeat
+    if r.size == n then break
+    let x ← p
+    r := r.push x
+  repeat
+    let some x ← optional p | break
+    r := r.push x
+  return r
+
+/-- inclusive -/
+@[inline, specialize]
+def takeUpTo (n : Nat) (p : Get α) : Get (Array α) := do
+  let mut r := #[]
+  repeat
+    if r.size == n then break
+    let some x ← optional p | break
+    r := r.push x
+  return r
+
+@[inline, specialize]
+def takeN (n : Nat) (p : Get α) : Get (Array α) := do
+  let mut r := #[]
+  repeat
+    if r.size == n then break
+    let x ← p
+    r := r.push x
+  return r
+
+/--inclusive on both sides -/
+@[inline, specialize]
+def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
+  let mut r := #[]
+  repeat
+    if r.size == min then break
+    let x ← p
+    r := r.push x
+  repeat
+    if r.size == max then break
+    let some x ← optional p | break
+    r := r.push x
+  return r
+
+end
+
+public section
+
 @[always_inline]
 instance : Decode UInt8 where
   get d :=
