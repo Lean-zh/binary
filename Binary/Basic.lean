@@ -30,7 +30,7 @@ deriving Inhabited
 @[always_inline]
 instance : Functor DecodeResult where
   map f t :=
-    let rec go t := match t with
+    let rec @[specialize] go t := match t with
       | .success x k => .success (f x) k
       | .error err cur => .error err cur
       | .pending fn => .pending fun bytes => go <| fn bytes
@@ -58,7 +58,7 @@ def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResul
 instance : Monad Get where
   pure x := fun d => DecodeResult.success x d
   bind mx xmy := fun d =>
-    let rec go s :=
+    let rec @[specialize] go s :=
       match s with
       | .error err d => .error err d
       | .success x cont => xmy x cont
@@ -70,7 +70,7 @@ instance : Monad Get where
 instance : Alternative Get where
   failure := fun d => DecodeResult.error (.userError "failure") d
   orElse x y := fun d =>
-    let rec go s :=
+    let rec @[specialize] go s :=
       match s with
       | r@(.success ..) => r
       | .error .. => y () d -- backtracking
@@ -82,7 +82,7 @@ instance : Alternative Get where
 instance : MonadExcept DecodeError Get where
   throw err := fun d => DecodeResult.error err d
   tryCatch body handler := fun d =>
-    let rec go s :=
+    let rec @[specialize] go s :=
       match s with
       | .success .. => s
       | .error err _ => handler err d -- backtracking
@@ -93,7 +93,7 @@ instance : MonadExcept DecodeError Get where
 @[always_inline]
 instance : MonadFinally Get where
   tryFinally' x f := fun d =>
-    let rec go s :=
+    let rec @[specialize] go s :=
       match s with
       | .success a k =>
         let r := f (some a) k

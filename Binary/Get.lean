@@ -7,6 +7,20 @@ namespace Binary
 
 public section
 
+@[always_inline, specialize]
+def many (p : Get α) : Get (Array α) := do
+  let mut data := #[]
+  repeat
+    let some x ← optional p | break
+    data := data.push x
+  return data
+
+@[always_inline, specialize]
+def many1 (p : Get α) : Get (Array α) := do
+  let first ← p
+  let rest ← many p
+  return rest.insertIdx 0 first
+
 @[always_inline]
 instance : Decode UInt8 where
   get d :=
