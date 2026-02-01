@@ -26,10 +26,14 @@ def many1 (p : Get α) : Get (Array α) := do
   return rest.insertIdx 0 first
 
 @[always_inline, specialize]
-def shouldBeEOI : Get Unit := do
+def shouldBeEOI (includeUnExpected : Bool := false) : Get Unit := do
   let x ← remaining
   if x > 0 then
-    fail "expected EOI"
+    if includeUnExpected then
+      let some c ← peek? | unreachable!
+      fail s!"unexpected '{Char.ofNat c.toNat}', expected EOI"
+    else
+      fail "expected EOI"
 
 -- TODO: refactor following definitions for performance
 
