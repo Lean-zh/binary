@@ -42,6 +42,12 @@ def DecodeResult.toExcept : DecodeResult α → Except DecodeError α
   | .error err _ => .error err
   | .pending _ => .error (.userError "pending input")
 
+@[always_inline]
+def DecodeResult.toExceptString : DecodeResult α → Except String α
+  | .success x _ => .ok x
+  | .error err _ => .error s!"{err}"
+  | .pending _ => .error "pending input"
+
 @[expose]
 def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
