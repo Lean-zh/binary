@@ -91,7 +91,8 @@ def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
 
 @[inline, specialize]
 def sepBy (x : Get α) (sep : Get Unit) : Get (Array α) := do
-  let mut t := #[]
+  let some l ← optional x | return #[]
+  let mut t := #[l]
   repeat
     let some v ← optional (sep *> x) | break
     t := t.push v
@@ -108,7 +109,8 @@ def sepBy1 (x : Get α) (s : Get Unit) : Get (Array α) := do
 
 @[inline, specialize]
 def sepByUpTo (n : Nat) (x : Get α) (s : Get Unit) : Get (Array α) := do
-  let mut t := #[]
+  let some l ← optional x | return #[]
+  let mut t := #[l]
   repeat
     if t.size ≥ n then break
     let some v ← optional (s *> x) | break
