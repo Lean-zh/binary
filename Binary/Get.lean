@@ -25,7 +25,7 @@ def many1 (p : Get α) : Get (Array α) := do
 
 @[inline, specialize]
 def takeAtLeast (n : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := #[]
+  let mut r := Array.emptyWithCapacity n
   repeat
     if r.size == n then break
     let x ← p
@@ -45,9 +45,20 @@ def takeUpTo (n : Nat) (p : Get α) : Get (Array α) := do
     r := r.push x
   return r
 
+/-- inclusive -/
+@[inline, specialize]
+def take1UpTo (n : Nat) (p : Get α) : Get (Array α) := do
+  let x ← p
+  let mut r := #[x]
+  repeat
+    if r.size == n then break
+    let some x ← optional p | break
+    r := r.push x
+  return r
+
 @[inline, specialize]
 def takeN (n : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := #[]
+  let mut r := Array.emptyWithCapacity 0
   repeat
     if r.size == n then break
     let x ← p
@@ -57,7 +68,7 @@ def takeN (n : Nat) (p : Get α) : Get (Array α) := do
 /--inclusive on both sides -/
 @[inline, specialize]
 def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := #[]
+  let mut r := Array.emptyWithCapacity min
   repeat
     if r.size == min then break
     let x ← p
@@ -67,6 +78,42 @@ def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
     let some x ← optional p | break
     r := r.push x
   return r
+
+@[inline, specialize]
+def sepBy (x : Get α) (sep : Get Unit) : Get (Array α) := do
+  let mut t := #[]
+  repeat
+    let some v ← optional (sep *> x) | break
+    t := t.push v
+  return t
+
+@[inline, specialize]
+def sepBy1 (x : Get α) (s : Get Unit) : Get (Array α) := do
+  let l ← x
+  let mut t := #[l]
+  repeat
+    let some v ← optional (s *> x) | break
+    t := t.push v
+  return t
+
+@[inline, specialize]
+def sepByUpTo (n : Nat) (x : Get α) (s : Get Unit) : Get (Array α) := do
+  let mut t := #[]
+  repeat
+    if t.size ≥ n then break
+    let some v ← optional (s *> x) | break
+    t := t.push v
+  return t
+
+@[inline, specialize]
+def sepBy1UpTo (n : Nat) (x : Get α) (s : Get Unit) : Get (Array α) := do
+  let l ← x
+  let mut t := #[l]
+  repeat
+    if t.size ≥ n then break
+    let some v ← optional (s *> x) | break
+    t := t.push v
+  return t
 
 end
 
