@@ -24,7 +24,7 @@ instance : ToString DecodeError where
 inductive DecodeResult (α) where
   | success (x : α) (k : Decoder)
   | error (err : DecodeError) (cur : Decoder)
-  | pending (fn : ByteArray → DecodeResult α)
+  | pending (fn : Option ByteArray → DecodeResult α)
 deriving Inhabited
 
 @[always_inline]
@@ -51,6 +51,7 @@ def DecodeResult.toExceptString : DecodeResult α → Except String α
 @[expose]
 def Get (α : Type) : Type := Decoder → (DecodeResult α)
 
+/-- The bytes in the current inner buffer, **not** considering pending input. -/
 @[always_inline]
 def remaining : Get Nat := fun d => DecodeResult.success (d.data.size - d.offset) d
 
@@ -59,6 +60,15 @@ def DecodeResult.feed {α} (bytes : ByteArray) : DecodeResult α → DecodeResul
   | .success x k => .success x (k.append bytes)
   | .error err k => .error err (k.append bytes)
   | .pending fn => fn bytes
+
+/--
+Immediately terminate the pending state.
+This is especially useful for terminating something like `optional (pending x)`. -/
+@[always_inline]
+def DecodeResult.terminate {α} : DecodeResult α → DecodeResult α
+  | .success x k => .success x k
+  | .error err k => .error err k
+  | .pending fn => fn none
 
 @[always_inline]
 instance : Monad Get where
@@ -191,12 +201,15 @@ Catch any `DecodeError.eoi` and recover to a pending state rather than exit with
 * ensure that `x` terminates when enough bytes are fed,
 * or define your own pending function to cache intermediate result as much as possible.
 -/
-@[specialize, always_inline]
+@[specialize]
 partial def pending (x : Get α) : Get α := do
   try x
   catch err =>
     match err with
-    | .eoi => fun d => .pending fun bytes => pending x (d.append bytes)
+    | .eoi => fun d => .pending fun bytes? =>
+      match bytes? with
+      | none => DecodeResult.mkEOI d
+      | some bytes => pending x (d.append bytes)
     | e => throw e
 
 namespace Primitive

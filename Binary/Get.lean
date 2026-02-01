@@ -11,7 +11,7 @@ public section
 def fail (msg : String) : Get α :=
   throw (.userError msg)
 
-@[always_inline, specialize]
+@[specialize]
 def many (p : Get α) : Get (Array α) := do
   let mut data := #[]
   repeat
@@ -19,7 +19,7 @@ def many (p : Get α) : Get (Array α) := do
     data := data.push x
   return data
 
-@[always_inline, specialize]
+@[inline, specialize]
 def many1 (p : Get α) : Get (Array α) := do
   let first ← p
   let rest ← many p
@@ -34,6 +34,13 @@ def shouldBeEOI (includeUnExpected : Bool := false) : Get Unit := do
       fail s!"unexpected '{Char.ofNat c.toNat}', expected EOI"
     else
       fail "expected EOI"
+
+@[always_inline]
+def notFollowedBy (p : Get α) : Get Unit := fun d =>
+  match p d with
+  | .success _ _ => DecodeResult.error (.userError "unexpected lookahead") d
+  | .error _ _ => DecodeResult.success () d
+  | .pending _ => DecodeResult.error (.userError "unexpected pending lookahead") d
 
 -- TODO: refactor following definitions for performance
 
@@ -150,6 +157,26 @@ instance : Decode Int8 where
       DecodeResult.success (d.data.get d.offset).toInt8 {d with offset := d.offset + 1}
     else
       DecodeResult.mkEOI d
+
+end
+
+public section
+
+/--
+This function **exhaustively** reads in all bytes starting from the current offset.
+The outermost caller **must** call `DecodeResult.terminate` to break from this function. -/
+def exhaust : Get ByteArray := do
+  let r ← remaining
+  let data ← get_bytes r
+  let mut rs := #[]
+  repeat
+    shrink
+    let some x ← (optional <| pending <| getThe UInt8) | break
+    let r ← remaining
+    let xs ← get_bytes r
+    rs := rs.push ⟨#[x]⟩
+    rs := rs.push xs
+  return rs.foldl (init := data) (· ++ ·)
 
 end
 
