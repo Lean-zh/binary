@@ -1,9 +1,9 @@
 module
 
-public meta import Lean
-import Binary.Basic
+public import Lean
+public import Binary.Basic
 
-public meta section
+public section
 
 namespace Binary.Deriving
 
@@ -12,7 +12,7 @@ open Elab
 open Deriving
 open Meta hiding Context
 open Term hiding Context
-open Command hiding Context
+open Elab.Command hiding Context
 
 
 /--
@@ -236,7 +236,7 @@ where
         let repr := assignment[ctorIdx]!
         let stx ←
           `(do
-              if (← $(beInfo.decoder)) != $(quote repr) then
+              if (← $(beInfo.decoder):term) != $(quote repr) then
                 throw (DecodeError.userError "")
               else
                 $[let $identNames:ident ← $decodes:doExpr]*
