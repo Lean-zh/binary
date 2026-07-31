@@ -15,7 +15,7 @@ private def byteToChar (b : UInt8) : Char :=
 private def chars_to_string (xs : Array Char) : String :=
   String.ofList xs.toList
 
-@[always_inline, specialize]
+@[noinline]
 def satisfy (p : Char → Bool) : Get Char := do
   let b ← pending (getThe UInt8)
   let b1 := UInt8.toUInt32 b
@@ -75,7 +75,7 @@ def satisfy (p : Char → Bool) : Get Char := do
 @[always_inline]
 def pchar (c : Char) : Get Char := satisfy (· == c)
 
-@[always_inline]
+@[inline]
 def pstring (s : String) : Get String := do
   for c in s.toList do
     _ ← inline pchar c
@@ -87,10 +87,10 @@ def skipChar (c : Char) : Get Unit := pchar c *> pure ()
 @[always_inline]
 def skipString (s : String) : Get Unit := pstring s *> pure ()
 
-@[always_inline, specialize]
+@[always_inline]
 def manyChars (p : Get Char) : Get String :=
   chars_to_string <$> many p
 
-@[always_inline, specialize]
+@[always_inline]
 def many1Chars (p : Get Char) : Get String :=
   chars_to_string <$> many1 p

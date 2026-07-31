@@ -1,7 +1,6 @@
 module
 
 public import Binary.Basic
-meta import Lean
 
 namespace Binary
 
@@ -11,7 +10,6 @@ public section
 def fail (msg : String) : Get α :=
   throw (.userError msg)
 
-@[specialize]
 def many (p : Get α) : Get (Array α) := do
   let mut data := #[]
   repeat
@@ -19,7 +17,7 @@ def many (p : Get α) : Get (Array α) := do
     data := data.push x
   return data
 
-@[inline, specialize]
+@[inline]
 def many1 (p : Get α) : Get (Array α) := do
   let first ← p
   let rest ← many p
@@ -42,9 +40,6 @@ def notFollowedBy (p : Get α) : Get Unit := fun d =>
   | .error _ _ => DecodeResult.success () d
   | .pending _ => DecodeResult.error (.userError "unexpected pending lookahead") d
 
--- TODO: refactor following definitions for performance
-
-@[inline, specialize]
 def takeAtLeast (n : Nat) (p : Get α) : Get (Array α) := do
   let mut r := Array.emptyWithCapacity n
   repeat
@@ -57,29 +52,29 @@ def takeAtLeast (n : Nat) (p : Get α) : Get (Array α) := do
   return r
 
 /-- inclusive -/
-@[inline, specialize]
+@[inline]
 def takeUpTo (n : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := #[]
-  repeat
+  let mut r := Array.emptyWithCapacity n
+  while true do
     if r.size == n then break
     let some x ← optional p | break
     r := r.push x
   return r
 
 /-- inclusive -/
-@[inline, specialize]
+@[inline]
 def take1UpTo (n : Nat) (p : Get α) : Get (Array α) := do
   let x ← p
-  let mut r := #[x]
+  let mut r := (Array.emptyWithCapacity n).push x
   repeat
     if r.size == n then break
     let some x ← optional p | break
     r := r.push x
   return r
 
-@[inline, specialize]
+@[inline]
 def takeN (n : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := Array.emptyWithCapacity 0
+  let mut r := Array.emptyWithCapacity n
   repeat
     if r.size == n then break
     let x ← p
@@ -87,9 +82,9 @@ def takeN (n : Nat) (p : Get α) : Get (Array α) := do
   return r
 
 /--inclusive on both sides -/
-@[inline, specialize]
+@[inline]
 def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
-  let mut r := Array.emptyWithCapacity min
+  let mut r := Array.emptyWithCapacity max
   repeat
     if r.size == min then break
     let x ← p
@@ -100,7 +95,7 @@ def takeRange (min max : Nat) (p : Get α) : Get (Array α) := do
     r := r.push x
   return r
 
-@[inline, specialize]
+@[inline]
 def sepBy (x : Get α) (sep : Get Unit) : Get (Array α) := do
   let some l ← optional x | return #[]
   let mut t := #[l]
@@ -109,7 +104,7 @@ def sepBy (x : Get α) (sep : Get Unit) : Get (Array α) := do
     t := t.push v
   return t
 
-@[inline, specialize]
+@[inline]
 def sepBy1 (x : Get α) (s : Get Unit) : Get (Array α) := do
   let l ← x
   let mut t := #[l]
@@ -118,20 +113,20 @@ def sepBy1 (x : Get α) (s : Get Unit) : Get (Array α) := do
     t := t.push v
   return t
 
-@[inline, specialize]
+@[inline]
 def sepByUpTo (n : Nat) (x : Get α) (s : Get Unit) : Get (Array α) := do
   let some l ← optional x | return #[]
-  let mut t := #[l]
+  let mut t := (Array.emptyWithCapacity n).push l
   repeat
     if t.size ≥ n then break
     let some v ← optional (s *> x) | break
     t := t.push v
   return t
 
-@[inline, specialize]
+@[inline]
 def sepBy1UpTo (n : Nat) (x : Get α) (s : Get Unit) : Get (Array α) := do
   let l ← x
-  let mut t := #[l]
+  let mut t := (Array.emptyWithCapacity n).push l
   repeat
     if t.size ≥ n then break
     let some v ← optional (s *> x) | break
@@ -182,72 +177,62 @@ end
 
 namespace Primitive
 
-variable {ω m} [Monad m] [STWorld ω m] [MonadLiftT (ST ω) m]
-
-private meta def generate_prim (le : Bool) (unsigned : Bool) (type : Lean.TSyntax `ident) (size : Lean.TSyntax `num) : Lean.MacroM Lean.Command := do
-  let len := size.getNat
-    if len = 0 then
-      Lean.Macro.throwErrorAt size "size cannot be 0"
-    let newSize := Lean.TSyntax.mk <| size.raw.setArg 0 (size.raw[0].setAtomVal s!"{len - 1}")
-    let d ← Lean.mkIdent <$> Lean.Macro.addMacroScope `d
-    let d_offset ← `($(Lean.mkIdent `Decoder.offset) $d:ident)
-    let d_data ← `($(Lean.mkIdent `Decoder.data) $d:ident)
-    let d_data_size ← `($(Lean.mkIdent `ByteArray.size) ($(Lean.mkIdent `Decoder.data) $d:ident))
-    let ns := List.range len
-    let ts ← ns.mapM fun x => do
-      let y ←
-        if unsigned then
-          `($(Lean.mkIdent `ByteArray.get) $d_data ($d_offset + $(Lean.Syntax.mkNatLit x):num))
-        else
-          `($(Lean.mkIdent `ByteArray.get) $d_data ($d_offset + $(Lean.Syntax.mkNatLit x):num) |>.toInt8)
-      let y ←
-        if unsigned then
-          `($(Lean.mkIdent (Lean.Name.mkStr2 "UInt8" s!"to{type.getId.getString!}")) $y)
-        else
-          `($(Lean.mkIdent (Lean.Name.mkStr2 "Int8" s!"to{type.getId.getString!}")) $y)
-      let shift := if le then x * 8 else (len - 1 - x) * 8
-      `($y <<< $(Lean.Syntax.mkNatLit shift):num)
-    let combined ←
-      match ts with
-      | [] => unreachable!
-      | [x] => pure x
-      | head :: tail => do
-        tail.foldlM (init := head) fun (x : Lean.Term) y => do
-          `($x ||| $y)
-    let code ← `(command|
-      @[always_inline]
-      scoped instance : Decode $type where
-        get $d:ident :=
-          if h : $d_offset + $newSize:num < $d_data_size then
-            let val := $combined
-            DecodeResult.success val {$d with offset := $d_offset + $(Lean.Syntax.mkNatLit len):num}
-          else
-            DecodeResult.mkEOI d
-      )
-    return code
-
-local syntax "prim_unsigned_le " ident num : command
-local syntax "prim_unsigned_be " ident num : command
-local syntax "prim_signed_le " ident num : command
-local syntax "prim_signed_be " ident num : command
-
-local macro_rules
-  | `(command| prim_unsigned_le $type $size) => generate_prim true true type size
-  | `(command| prim_unsigned_be $type $size) => generate_prim false true type size
-  | `(command| prim_signed_le $type $size) => generate_prim true false type size
-  | `(command| prim_signed_be $type $size) => generate_prim false false type size
-
 public section
 
 namespace LE
 
-prim_unsigned_le UInt16 2
-prim_unsigned_le UInt32 4
-prim_unsigned_le UInt64 8
+@[always_inline]
+scoped instance : Decode UInt16 where
+  get d :=
+    if h : d.offset + 1 < d.data.size then
+      let val :=
+        (d.data[d.offset + 0]).toUInt16 |||
+        (d.data[d.offset + 1]).toUInt16 <<< 8
+      DecodeResult.success val {d with offset := d.offset + 2}
+    else
+      DecodeResult.mkEOI d
 
-prim_signed_le Int16 2
-prim_signed_le Int32 4
-prim_signed_le Int64 8
+@[always_inline]
+scoped instance : Decode UInt32 where
+  get d :=
+    if h : d.offset + 3 < d.data.size then
+      let val :=
+        (d.data.get (d.offset + 0)).toUInt32 |||
+        (d.data.get (d.offset + 1)).toUInt32 <<< 8 |||
+        (d.data.get (d.offset + 2)).toUInt32 <<< 16 |||
+        (d.data.get (d.offset + 3)).toUInt32 <<< 24
+      DecodeResult.success val {d with offset := d.offset + 4}
+    else
+      DecodeResult.mkEOI d
+
+@[always_inline]
+scoped instance : Decode UInt64 where
+  get d :=
+    if h : d.offset + 7 < d.data.size then
+      let val :=
+        (d.data.get (d.offset + 0)).toUInt64 |||
+        (d.data.get (d.offset + 1)).toUInt64 <<< 8 |||
+        (d.data.get (d.offset + 2)).toUInt64 <<< 16 |||
+        (d.data.get (d.offset + 3)).toUInt64 <<< 24 |||
+        (d.data.get (d.offset + 4)).toUInt64 <<< 32 |||
+        (d.data.get (d.offset + 5)).toUInt64 <<< 40 |||
+        (d.data.get (d.offset + 6)).toUInt64 <<< 48 |||
+        (d.data.get (d.offset + 7)).toUInt64 <<< 56
+      DecodeResult.success val {d with offset := d.offset + 8}
+    else
+      DecodeResult.mkEOI d
+
+@[always_inline]
+scoped instance : Decode Int16 where
+  get := Int16.ofUInt16 <$> Decode.get (α := UInt16)
+
+@[always_inline]
+scoped instance : Decode Int32 where
+  get := Int32.ofUInt32 <$> Decode.get (α := UInt32)
+
+@[always_inline]
+scoped instance : Decode Int64 where
+  get := Int64.ofUInt64 <$> Decode.get (α := UInt64)
 
 @[always_inline]
 scoped instance : Decode Float32 where
@@ -261,13 +246,58 @@ end LE
 
 namespace BE
 
-prim_unsigned_be UInt16 2
-prim_unsigned_be UInt32 4
-prim_unsigned_be UInt64 8
+@[always_inline]
+scoped instance : Decode UInt16 where
+  get d :=
+    if h : d.offset + 1 < d.data.size then
+      let val :=
+        (d.data.get (d.offset + 0)).toUInt16 <<< 8 |||
+        (d.data.get (d.offset + 1)).toUInt16
+      DecodeResult.success val {d with offset := d.offset + 2}
+    else
+      DecodeResult.mkEOI d
 
-prim_signed_be Int16 2
-prim_signed_be Int32 4
-prim_signed_be Int64 8
+@[always_inline]
+scoped instance : Decode UInt32 where
+  get d :=
+    if h : d.offset + 3 < d.data.size then
+      let val :=
+        (d.data.get (d.offset + 0)).toUInt32 <<< 24 |||
+        (d.data.get (d.offset + 1)).toUInt32 <<< 16 |||
+        (d.data.get (d.offset + 2)).toUInt32 <<< 8 |||
+        (d.data.get (d.offset + 3)).toUInt32
+      DecodeResult.success val {d with offset := d.offset + 4}
+    else
+      DecodeResult.mkEOI d
+
+@[always_inline]
+scoped instance : Decode UInt64 where
+  get d :=
+    if h : d.offset + 7 < d.data.size then
+      let val :=
+        (d.data.get (d.offset + 0)).toUInt64 <<< 56 |||
+        (d.data.get (d.offset + 1)).toUInt64 <<< 48 |||
+        (d.data.get (d.offset + 2)).toUInt64 <<< 40 |||
+        (d.data.get (d.offset + 3)).toUInt64 <<< 32 |||
+        (d.data.get (d.offset + 4)).toUInt64 <<< 24 |||
+        (d.data.get (d.offset + 5)).toUInt64 <<< 16 |||
+        (d.data.get (d.offset + 6)).toUInt64 <<< 8 |||
+        (d.data.get (d.offset + 7)).toUInt64
+      DecodeResult.success val {d with offset := d.offset + 8}
+    else
+      DecodeResult.mkEOI d
+
+@[always_inline]
+scoped instance : Decode Int16 where
+  get := Int16.ofUInt16 <$> Decode.get (α := UInt16)
+
+@[always_inline]
+scoped instance : Decode Int32 where
+  get := Int32.ofUInt32 <$> Decode.get (α := UInt32)
+
+@[always_inline]
+scoped instance : Decode Int64 where
+  get := Int64.ofUInt64 <$> Decode.get (α := UInt64)
 
 @[always_inline]
 scoped instance : Decode Float32 where
